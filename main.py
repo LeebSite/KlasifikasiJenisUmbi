@@ -8,7 +8,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score, classification_report
 
 # Set dataset path
-dataset_path = "path/to/your/DataUmbi"  # Update with the path to your dataset folder
+dataset_path = "DataUmbi"
 
 # 1. Save Grayscale and RGB Data to Separate Sheets in Excel
 def save_image_data_to_excel(image_path, excel_path):
@@ -39,7 +39,6 @@ def save_image_data_to_excel(image_path, excel_path):
 
 # 2. Preprocessing and Feature Extraction
 def preprocess_and_extract_features(image):
-    # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     resized = cv2.resize(gray, (128, 128))
 
@@ -80,61 +79,32 @@ def extract_shape_features(image):
         return [area, perimeter, metric, major_axis, minor_axis, eccentricity]
     return [0, 0, 0, 0, 0, 0]
 
-# 5. Load Dataset with Label Map and Save Features
-def load_dataset_with_labels_and_save(data_dir, excel_path):
-    labels = []
-    features = []
-    filenames = []
-    label_map = {}
-    for label, class_dir in enumerate(sorted(os.listdir(data_dir))):
-        class_path = os.path.join(data_dir, class_dir)
-        if os.path.isdir(class_path):
-            label_map[label] = class_dir
-            for image_file in os.listdir(class_path):
-                image_path = os.path.join(class_path, image_file)
-                if image_file.endswith(('.png', '.jpg', '.jpeg')):
-                    img = cv2.imread(image_path)
-                    features.append(preprocess_and_extract_features(img))
-                    labels.append(label)
-                    filenames.append(f"{class_dir}({image_file})")
-    # Save features to Excel
-    save_features_to_excel(features, labels, filenames, excel_path)
-    return np.array(features), np.array(labels), filenames, label_map
-
-# 6. Save Features to Excel
-def save_features_to_excel(features, labels, filenames, excel_path):
-    columns = ["Contrast", "Energy", "Correlation", "Homogeneity", "Entropy",
-               "Area", "Perimeter", "Metric", "Major Axis", "Minor Axis", "Eccentricity",
-               "Mean Red", "Mean Green", "Mean Blue"]
-    df = pd.DataFrame(features, columns=columns)
-    df["Label"] = labels
-    df["Filename"] = filenames
-    df.to_excel(excel_path, index=False)
-    print(f"Saved features to {excel_path}")
-
-# 7. Train and Optimize KNN
-def train_and_optimize_knn(X_train, y_train):
-    param_grid = {'n_neighbors': range(1, 21)}
-    grid_search = GridSearchCV(KNeighborsClassifier(), param_grid, cv=5)
-    grid_search.fit(X_train, y_train)
-    best_k = grid_search.best_params_['n_neighbors']
-    print(f"Optimal k: {best_k}")
-    return grid_search.best_estimator_
-
-# 8. Predict New Image
-def predict_new_image(model, image_path, label_map):
-    img = cv2.imread(image_path)
-    features = preprocess_and_extract_features(img).reshape(1, -1)
-    prediction = model.predict(features)
-    return label_map[prediction[0]]
+# 5. Capture Image from Camera
+def capture_image_from_camera():
+    cap = cv2.VideoCapture(0)  # Use default camera
+    print("Press 's' to save the image or 'q' to quit.")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Failed to grab frame.")
+            break
+        cv2.imshow("Camera", frame)
+        key = cv2.waitKey(1)
+        if key == ord('s'):  # Save image on pressing 's'
+            image_path = "captured_image.png"
+            cv2.imwrite(image_path, frame)
+            print(f"Image saved to {image_path}")
+            break
+        elif key == ord('q'):  # Exit on pressing 'q'
+            print("Exiting without saving.")
+            break
+    cap.release()
+    cv2.destroyAllWindows()
+    return image_path if key == ord('s') else None
 
 # Main Program
 if __name__ == "__main__":
-    # Save Grayscale and RGB for a Sample Image
-    sample_image_path = os.path.join(dataset_path, "Kentang", "kentang1.png")
-    save_image_data_to_excel(sample_image_path, "Kentang_grayscale_rgb.xlsx")
-
-    # Load Dataset and Save Features
+    # Load Dataset
     features, labels, filenames, label_map = load_dataset_with_labels_and_save(dataset_path, "Features.xlsx")
 
     # Split Data for Training and Testing
@@ -147,7 +117,8 @@ if __name__ == "__main__":
     y_pred = knn_model.predict(X_test)
     print(f"Classification Report:\n{classification_report(y_test, y_pred)}")
 
-    # Predict New Image
-    image_path = input("Enter the path to the image for prediction: ")
-    predicted_class = predict_new_image(knn_model, image_path, label_map)
-    print(f"Predicted Class: {predicted_class}")
+    # Predict Image from Camera
+    image_path = capture_image_from_camera()
+    if image_path:
+        predicted_class = predict_new_image(knn_model, image_path, label_map)
+        print(f"Predicted Class: {predicted_class}")
